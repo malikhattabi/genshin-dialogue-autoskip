@@ -31,7 +31,7 @@ if [[ "$SESSION_TYPE" == "wayland" || $HAS_WAYLAND -eq 1 ]]; then
     command -v wtype >/dev/null 2>&1 || print_warn "wtype not found (required for key injection on native Wayland)."
     command -v grim >/dev/null 2>&1 || print_warn "grim not found (required for pixel capture on native Wayland)."
     if ! command -v hyprctl >/dev/null 2>&1 && ! command -v swaymsg >/dev/null 2>&1; then
-      print_warn "hyprctl/swaymsg not found (required for native Wayland active-window detection)."
+      print_warn "hyprctl/swaymsg not found (required for native Wayland active-window detection on Hyprland/Sway)."
     fi
   fi
 fi

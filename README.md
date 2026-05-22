@@ -172,7 +172,7 @@ The script automatically adapts to various resolutions including:
   - Active-window title: `hyprctl` (Hyprland) or `swaymsg` (Sway)
   - Key injection: `wtype`
   - Pixel capture: `grim`
-- Window title matching checks for titles starting with `genshin impact` (case-insensitive).
+- Window title matching is case-insensitive and expects the exact title `Genshin Impact`.
 - Global hotkey capture (`F8`/`F9`/`F12`) depends on desktop input hook support; sandboxed desktops may block it.
 
 ## 🔧 How It Works

@@ -242,12 +242,12 @@ def check_runtime_requirements() -> None:
 
     if PYAUTOGUI_IMPORT_ERROR is not None:
         if backend == "wayland_native":
-            print(f"[WARN] pyautogui import failed; using Wayland-native fallback tools: {PYAUTOGUI_IMPORT_ERROR}")
+            print(f"[WARN] pyautogui import failed; this is expected on some native Wayland sessions, using compositor-specific tools instead: {str(PYAUTOGUI_IMPORT_ERROR)}")
         else:
-            if platform.system() == "Linux":
-                print("        On Linux install runtime deps such as python3-tk and python3-xlib.")
             print(f"[ERROR] Failed to import pyautogui: {PYAUTOGUI_IMPORT_ERROR}")
             print("        Ensure graphical desktop dependencies are installed.")
+            if platform.system() == "Linux":
+                print("        On Linux install runtime deps such as python3-tk and python3-xlib.")
             raise SystemExit(1)
     if PYNPUT_IMPORT_ERROR is not None:
         print(f"[ERROR] Failed to import pynput keyboard listener: {PYNPUT_IMPORT_ERROR}")
@@ -386,8 +386,12 @@ else:
     SCREEN_WIDTH = int(width_str)
     SCREEN_HEIGHT = int(height_str)
 
-    CONFIRM_BUTTON = os.getenv("CONFIRM_BUTTON", "f")
-    DEVICE = os.getenv("DEVICE", "mnk")
+    confirm_button = os.getenv("CONFIRM_BUTTON")
+    device = os.getenv("DEVICE")
+    if confirm_button is None or device is None:
+        raise ValueError("CONFIRM_BUTTON or DEVICE environment variable is None")
+    CONFIRM_BUTTON = confirm_button
+    DEVICE = device
 
     print(f"Current resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}\nChosen device: {DEVICE}\nCurrent interaction key: {CONFIRM_BUTTON}")
 
@@ -486,7 +490,7 @@ def main() -> None:
                 print("        The script will remain paused until active-window APIs are available.")
                 active_window_warning_shown = True
             return False
-        return bool(title and title.lower().startswith("genshin impact"))
+        return title.lower() == "genshin impact"
 
     def is_dialogue_playing() -> tuple[bool, bool]:
         """Check if dialogue is currently playing (autoplay button visible)."""
