@@ -40,14 +40,16 @@ The script includes human-like behavior patterns with randomized timing and occa
 ## 📦 Requirements
 
 ### System Requirements
-- **OS**: Windows (with win32api support)
+- **OS**: Windows or Linux (desktop session)
 - **Python**: 3.11 or higher
 - **Display**: Primary monitor (multi-monitor setups should have game on primary display)
-- **Privileges**: Administrator rights (required for key emulation)
+- **Privileges**:
+  - Windows: Administrator rights recommended for global key hooks/input emulation
+  - Linux: X11, Wayland+XWayland, or native Wayland desktop session (headless shells are not supported)
 
 ### Software Requirements
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) package manager (auto-installed by run.bat)
+- [uv](https://github.com/astral-sh/uv) package manager (auto-installed by `run.bat` / `run.sh`)
 - Genshin Impact installed and running
 
 ### In-Game Settings
@@ -63,12 +65,18 @@ The script includes human-like behavior patterns with randomized timing and occa
    cd genshin-dialogue-autoskip
    ```
 
-2. **Right-click** `run.bat` and select **"Run as administrator"**
-   - The script will automatically:
-     - Check for Administrator privileges
+2. Launch the platform script:
+   - **Windows**: Right-click `run.bat` and select **"Run as administrator"**
+   - **Linux**:
+     ```bash
+     chmod +x run.sh
+     ./run.sh
+     ```
+   - The launcher script will automatically:
      - Verify Python installation
+     - Verify pip availability
      - Install `uv` package manager if needed
-     - Install all dependencies
+     - Install dependencies
      - Launch the application
 
 ### Option 2: Manual Setup
@@ -86,10 +94,11 @@ The script includes human-like behavior patterns with randomized timing and occa
    uv sync
    ```
 
-4. **Run the script** with Admin privileges:
+4. **Run the script**:
    ```bash
    uv run autoskip_dialogue.py
    ```
+   - On Linux, run from a graphical desktop terminal (not headless SSH)
 
 ## 📖 Usage
 
@@ -98,8 +107,9 @@ The script includes human-like behavior patterns with randomized timing and occa
 1. **Launch Genshin Impact** and ensure it's running on your primary display
 
 2. **Run the script**:
-   - Right-click `run.bat` → **"Run as administrator"**, or
-   - Run `autoskip_dialogue.py` with admin privileges
+   - Windows: Right-click `run.bat` → **"Run as administrator"**
+   - Linux: Run `./run.sh`
+   - Or run manually with `uv run autoskip_dialogue.py`
 
 3. **Verify Resolution**:
    - On first run, the script will auto-detect your screen resolution
@@ -153,6 +163,18 @@ The script automatically adapts to various resolutions including:
 - **3840x2160** (4K)
 - Custom resolutions and ultrawide monitors
 
+### Linux Notes
+
+- The script requires a desktop display session. If `DISPLAY`/`WAYLAND_DISPLAY` is missing, it exits with a clear error.
+- X11 session: active-window + key input uses `pyautogui` (fallback to `xdotool` for active title).
+- Wayland with XWayland game: detected when both `WAYLAND_DISPLAY` and `DISPLAY` are available; X11-compatible paths are used.
+- Native Wayland game/session: requires compositor/helper tools:
+  - Active-window title: `hyprctl` (Hyprland) or `swaymsg` (Sway)
+  - Key injection: `wtype`
+  - Pixel capture: `grim`
+- Window title matching is case-insensitive and expects the exact title `Genshin Impact`.
+- Global hotkey capture (`F8`/`F9`/`F12`) depends on desktop input hook support; sandboxed desktops may block it.
+
 ## 🔧 How It Works
 
 ### Detection System
@@ -174,6 +196,7 @@ To mimic human interaction:
 ### Safety Features
 
 - **Admin Check**: Verifies administrator privileges before running
+- **Linux Session Check**: Fails early with guidance when no graphical session is available
 - **Python Check**: Confirms Python installation and version
 - **Error Handling**: Gracefully handles errors with informative messages
 - **Retry Logic**: Offers retry option if execution fails
@@ -183,8 +206,8 @@ To mimic human interaction:
 ### Common Issues
 
 #### Script won't start
-- **Solution**: Ensure you're running as Administrator
-- Right-click `run.bat` → "Run as administrator"
+- **Windows solution**: Ensure you're running as Administrator (`run.bat` → "Run as administrator")
+- **Linux solution**: Ensure you're running from a graphical desktop session and backend-specific tools are installed for your mode
 
 #### "Python is not installed" error
 - **Solution**: Install Python 3.11+ from [python.org](https://www.python.org/downloads/)
@@ -192,7 +215,7 @@ To mimic human interaction:
 
 #### Dialogue not being skipped
 - **Verify**:
-  - Genshin Impact is the active window
+  - Genshin Impact is the active window (Linux window title may vary by window manager)
   - Auto-skip is enabled (press F8)
   - In-game "Auto-Play Story" is set to **Off**
   - Game is running on primary monitor
@@ -206,7 +229,8 @@ To mimic human interaction:
 
 #### Key presses not working
 - **Check**:
-  - Script is running with Administrator privileges
+  - Windows: script is running with Administrator privileges
+  - Linux: desktop/session allows global keyboard hooks
   - No other programs are intercepting keyboard input
   - Genshin Impact has focus
 
@@ -216,6 +240,11 @@ To mimic human interaction:
 |-------|---------|----------|
 | "This script requires Administrator privileges" | Not running as admin | Run as administrator |
 | "Python is not installed or not in PATH" | Python not found | Install Python and add to PATH |
+| "No graphical session detected" | Linux desktop env vars missing | Run from desktop terminal with X11/Wayland session |
+| "Native Wayland key injection requires `wtype`" | Native Wayland input backend missing | Install `wtype` |
+| "Native Wayland pixel capture requires `grim`" | Native Wayland capture backend missing | Install `grim` |
+| "Native Wayland active-window detection is not supported" | No supported compositor API tool | Install/use `hyprctl` (Hyprland) or `swaymsg` (Sway) |
+| "Active window detection is unavailable" | Window manager/session does not expose active title APIs | Use a supported desktop session/window manager |
 | "Failed to install uv" | Network or permission issue | Check internet connection, try manual install |
 | "Script exited with error code: X" | Runtime error | Check console for details, retry with F8 |
 

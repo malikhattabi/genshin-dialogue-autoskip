@@ -1,16 +1,40 @@
 import os
+import platform
+import shutil
+import subprocess
+from io import BytesIO
+from json import loads
 from random import randint, uniform
 from threading import Thread
 from time import perf_counter, sleep
-from typing import Union
-from win32api import GetSystemMetrics  # type: ignore[import-untyped]
 
-from pyautogui import getActiveWindowTitle, press, pixel  # type: ignore[import-untyped]
-from pynput.keyboard import Key, KeyCode, Listener  # type: ignore[import-untyped]
 from dotenv import find_dotenv, load_dotenv, set_key  # type: ignore[import-not-found]
 
 # Initial setup
-os.system("cls")
+# Platform-safe imports so Linux headless/X11 limitations can be reported cleanly.
+PYAUTOGUI_IMPORT_ERROR: Exception | None = None
+PYNPUT_IMPORT_ERROR: Exception | None = None
+PIL_IMPORT_ERROR: Exception | None = None
+
+try:
+    import pyautogui  # type: ignore[import-untyped]
+except Exception as exc:  # pragma: no cover - import behavior is platform dependent
+    pyautogui = None  # type: ignore[assignment]
+    PYAUTOGUI_IMPORT_ERROR = exc
+
+try:
+    from pynput.keyboard import Listener  # type: ignore[import-untyped]
+except Exception as exc:  # pragma: no cover - import behavior is platform dependent
+    Listener = None  # type: ignore[assignment]
+    PYNPUT_IMPORT_ERROR = exc
+
+try:
+    from PIL import Image  # type: ignore[import-untyped]
+except Exception as exc:
+    Image = None  # type: ignore[assignment]
+    PIL_IMPORT_ERROR = exc
+
+os.system("cls" if os.name == "nt" else "clear")
 load_dotenv()
 print("\n" + "=" * 60)
 print("  GENSHIN IMPACT - DIALOGUE AUTO-SKIPPER")
@@ -51,6 +75,196 @@ COORDS = {
         }
     }
 }
+
+
+def display_backend() -> str:
+    """Return display backend flavor used for capture/input routing."""
+    session_type = os.getenv("XDG_SESSION_TYPE", "").lower()
+    has_x11 = bool(os.getenv("DISPLAY"))
+    has_wayland = bool(os.getenv("WAYLAND_DISPLAY"))
+    if session_type == "x11":
+        return "x11"
+    if session_type == "wayland":
+        return "wayland_xwayland" if has_x11 else "wayland_native"
+    if has_wayland:
+        return "wayland_xwayland" if has_x11 else "wayland_native"
+    if has_x11:
+        return "x11"
+    return "unknown"
+
+
+def command_exists(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def run_command(args: list[str]) -> tuple[int, str]:
+    """Run command and return (exit_code, stdout)."""
+    try:
+        completed = subprocess.run(
+            args,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception as err:
+        return 1, str(err)
+    return completed.returncode, completed.stdout.strip()
+
+
+def get_wayland_active_window_title() -> str | None:
+    """Best-effort active window title for native Wayland compositors."""
+    if command_exists("hyprctl"):
+        code, out = run_command(["hyprctl", "activewindow", "-j"])
+        if code == 0 and out:
+            try:
+                data = loads(out)
+                title = data.get("title")
+                if isinstance(title, str) and title:
+                    return title
+            except Exception:
+                pass
+    if command_exists("swaymsg"):
+        code, out = run_command(["swaymsg", "-t", "get_tree", "-r"])
+        if code == 0 and out:
+            try:
+                tree = loads(out)
+                stack = [tree]
+                while stack:
+                    node = stack.pop()
+                    if node.get("focused") and isinstance(node.get("name"), str):
+                        return node["name"]
+                    stack.extend(node.get("nodes", []))
+                    stack.extend(node.get("floating_nodes", []))
+            except Exception:
+                pass
+    return None
+
+
+def get_x11_active_window_title() -> str | None:
+    """Best-effort active window title for X11 and XWayland windows."""
+    if pyautogui is not None:
+        try:
+            title = pyautogui.getActiveWindowTitle()
+            if title:
+                return title
+        except Exception:
+            pass
+    if command_exists("xdotool"):
+        code, out = run_command(["xdotool", "getactivewindow", "getwindowname"])
+        if code == 0 and out:
+            return out
+    return None
+
+
+def get_pixel_color(x: int, y: int, backend: str) -> tuple[int, int, int]:
+    """Read pixel color; native Wayland falls back to grim."""
+    if pyautogui is not None:
+        try:
+            return pyautogui.pixel(x, y)
+        except Exception:
+            pass
+    if backend == "wayland_native" and command_exists("grim") and Image is not None:
+        try:
+            completed = subprocess.run(
+                ["grim", "-g", f"{x},{y} 1x1", "-"],
+                check=False,
+                capture_output=True,
+            )
+            if completed.returncode == 0 and completed.stdout:
+                image = Image.open(BytesIO(completed.stdout))
+                pixel = image.getpixel((0, 0))
+                return (pixel[0], pixel[1], pixel[2])
+        except Exception:
+            pass
+    raise RuntimeError("No supported pixel capture backend is available")
+
+
+def get_screen_size(backend: str) -> tuple[int, int]:
+    """Get screen size for current backend."""
+    if pyautogui is not None:
+        size = pyautogui.size()
+        return size.width, size.height
+    if backend == "wayland_native" and command_exists("grim") and Image is not None:
+        completed = subprocess.run(
+            ["grim", "-"],
+            check=False,
+            capture_output=True,
+        )
+        if completed.returncode == 0 and completed.stdout:
+            image = Image.open(BytesIO(completed.stdout))
+            return image.width, image.height
+    raise RuntimeError("Unable to determine screen size for this backend")
+
+
+def press_key(key_name: str, backend: str) -> None:
+    """Send key press; native Wayland uses wtype, X11/XWayland uses pyautogui."""
+    if backend in {"x11", "wayland_xwayland"} and pyautogui is not None:
+        pyautogui.press(key_name)
+        return
+    if backend in {"x11", "wayland_xwayland"} and command_exists("xdotool"):
+        code, _ = run_command(["xdotool", "key", key_name])
+        if code == 0:
+            return
+        raise RuntimeError("xdotool could not send key event")
+    if backend == "wayland_native":
+        if command_exists("wtype"):
+            code, _ = run_command(["wtype", "-k", key_name])
+            if code == 0:
+                return
+            raise RuntimeError("wtype could not send key event")
+        raise RuntimeError("Native Wayland key injection requires `wtype`")
+    if pyautogui is not None:
+        pyautogui.press(key_name)
+        return
+    raise RuntimeError("No supported key injection backend is available")
+
+
+def check_runtime_requirements() -> None:
+    """Validate runtime requirements and print platform-specific guidance."""
+    backend = display_backend()
+    if platform.system() == "Linux":
+        if backend == "unknown":
+            print("[ERROR] No graphical session detected (missing DISPLAY/WAYLAND_DISPLAY).")
+            print("        Run this script from a desktop session (X11/Wayland), not headless SSH.")
+            raise SystemExit(1)
+        if backend == "wayland_native":
+            # Native Wayland requires compositor-specific APIs/tools.
+            if not (command_exists("hyprctl") or command_exists("swaymsg")):
+                print("[ERROR] Native Wayland active-window detection is not supported in this session.")
+                print("        Install/use Hyprland (`hyprctl`) or Sway (`swaymsg`) support.")
+                raise SystemExit(1)
+            if not command_exists("wtype"):
+                print("[ERROR] Native Wayland key injection requires `wtype`.")
+                print("        Install `wtype` or run the game via XWayland with DISPLAY enabled.")
+                raise SystemExit(1)
+            if not command_exists("grim"):
+                print("[ERROR] Native Wayland pixel capture requires `grim`.")
+                print("        Install `grim` or run the game via XWayland with DISPLAY enabled.")
+                raise SystemExit(1)
+
+    if PYAUTOGUI_IMPORT_ERROR is not None:
+        if backend == "wayland_native":
+            print("[WARN] pyautogui import failed; using native Wayland fallbacks instead:")
+            print(f"       {str(PYAUTOGUI_IMPORT_ERROR)}")
+        else:
+            print(f"[ERROR] Failed to import pyautogui: {PYAUTOGUI_IMPORT_ERROR}")
+            print("        Ensure graphical desktop dependencies are installed.")
+            if platform.system() == "Linux":
+                print("        On Linux install runtime deps such as python3-tk and python3-xlib.")
+            raise SystemExit(1)
+    if PYNPUT_IMPORT_ERROR is not None:
+        print(f"[ERROR] Failed to import pynput keyboard listener: {PYNPUT_IMPORT_ERROR}")
+        print("        Ensure global keyboard hook support is available on this system.")
+        raise SystemExit(1)
+    if backend == "wayland_native" and Image is None:
+        print("[ERROR] Pillow (PIL) is required for native Wayland pixel capture fallback.")
+        if PIL_IMPORT_ERROR is not None:
+            print(f"        PIL import error: {str(PIL_IMPORT_ERROR)}")
+        raise SystemExit(1)
+
+
+check_runtime_requirements()
+DISPLAY_BACKEND = display_backend()
 
 
 def width_adjust(x: int) -> int:
@@ -132,8 +346,7 @@ def get_pixel(device: str, res: tuple[int,int], name: str):
 # Check if either screen dimension is missing from .env
 if os.environ.get("WIDTH", "") == "" or os.environ.get("HEIGHT", "") == "" or os.environ.get("CONFIRM_BUTTON", "") == "" or os.environ.get("DEVICE", "") == "":
     # Detect and set screen dimensions
-    SCREEN_WIDTH = GetSystemMetrics(0)
-    SCREEN_HEIGHT = GetSystemMetrics(1)
+    SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_size(DISPLAY_BACKEND)
     CONFIRM_BUTTON = "f" # F by default
     DEVICE = "mnk" # mouse n keyboard by default
 
@@ -181,8 +394,14 @@ else:
     SCREEN_WIDTH = int(width_str)
     SCREEN_HEIGHT = int(height_str)
 
-    CONFIRM_BUTTON = os.getenv("CONFIRM_BUTTON")
-    DEVICE = os.getenv("DEVICE")
+    confirm_button = os.getenv("CONFIRM_BUTTON")
+    device = os.getenv("DEVICE")
+    if confirm_button is None:
+        raise ValueError("Missing required environment variable: CONFIRM_BUTTON")
+    if device is None:
+        raise ValueError("Missing required environment variable: DEVICE")
+    CONFIRM_BUTTON = confirm_button
+    DEVICE = device
 
     print(f"Current resolution: {SCREEN_WIDTH}x{SCREEN_HEIGHT}\nChosen device: {DEVICE}\nCurrent interaction key: {CONFIRM_BUTTON}")
 
@@ -228,7 +447,7 @@ class MainStatus:
 main_status = MainStatus()
 
 
-def on_press(key: Union[Key, KeyCode, None]) -> None:
+def on_press(key: object) -> None:
     """
     Start, stop, or exit the program based on the key pressed.
     :param key: The key pressed.
@@ -264,15 +483,34 @@ def main() -> None:
     :return: None
     """
 
+    active_window_warning_shown = False
+
     def is_genshin_impact_active() -> bool:
         """Check if Genshin Impact is the active window."""
-        title = getActiveWindowTitle()
-        return bool(title == "Genshin Impact")
+        nonlocal active_window_warning_shown
+        title: str | None
+        if DISPLAY_BACKEND == "wayland_native":
+            title = get_wayland_active_window_title()
+        else:
+            title = get_x11_active_window_title()
+        if title is None:
+            if not active_window_warning_shown:
+                # Wayland compositors/window managers can block active-title APIs.
+                print("[ERROR] Active window detection is unavailable for this session/window manager.")
+                print("        The script will remain paused until active-window APIs are available.")
+                print("        Press F12 to exit, or use a supported compositor/backend setup.")
+                active_window_warning_shown = True
+            return False
+        return title.casefold() == "genshin impact"
 
     def is_dialogue_playing() -> tuple[bool, bool]:
         """Check if dialogue is currently playing (autoplay button visible)."""
         try:
-            current_pixel = pixel(get_pixel(DEVICE, res, "PLAYING_ICON_X"), get_pixel(DEVICE, res, "PLAYING_ICON_Y"))
+            current_pixel = get_pixel_color(
+                get_pixel(DEVICE, res, "PLAYING_ICON_X"),
+                get_pixel(DEVICE, res, "PLAYING_ICON_Y"),
+                DISPLAY_BACKEND,
+            )
             return bool(current_pixel == (236, 229, 216)), False
         except Exception:
             return False, False
@@ -281,15 +519,15 @@ def main() -> None:
         """Check if dialogue options are available."""
         try:
             # Confirm loading screen is not white
-            if pixel(get_pixel(DEVICE, res, "LOADING_SCREEN_X"), get_pixel(DEVICE, res, "LOADING_SCREEN_Y")) == (255, 255, 255):
+            if get_pixel_color(get_pixel(DEVICE, res, "LOADING_SCREEN_X"), get_pixel(DEVICE, res, "LOADING_SCREEN_Y"), DISPLAY_BACKEND) == (255, 255, 255):
                 return False, False
 
             # Check if lower dialogue icon pixel is white
-            if pixel(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_LOWER_Y")) == (255, 255, 255):
+            if get_pixel_color(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_LOWER_Y"), DISPLAY_BACKEND) == (255, 255, 255):
                 return True, True
 
             # Check if higher dialogue icon pixel is white
-            if pixel(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_HIGHER_Y")) == (255, 255, 255):
+            if get_pixel_color(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_HIGHER_Y"), DISPLAY_BACKEND) == (255, 255, 255):
                 return True, True
 
             return False, False
@@ -355,9 +593,9 @@ def main() -> None:
         if current_time - last_f_press >= next_f_interval:
             try:
                 if not options_available:
-                    press("f")
+                    press_key("f", DISPLAY_BACKEND)
                 else:
-                    press(CONFIRM_BUTTON)
+                    press_key(CONFIRM_BUTTON, DISPLAY_BACKEND)
             except Exception as e:
                 print(f"\n  Error pressing {CONFIRM_BUTTON} key: {e}")
 
@@ -372,5 +610,8 @@ def main() -> None:
 if __name__ == "__main__":
     Thread(target=main).start()
 
+    if Listener is None:
+        print("[ERROR] Keyboard listener is unavailable on this platform/session.")
+        raise SystemExit(1)
     with Listener(on_press=on_press) as listener:
         listener.join()
