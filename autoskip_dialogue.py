@@ -14,6 +14,7 @@ from dotenv import find_dotenv, load_dotenv, set_key  # type: ignore[import-not-
 # Platform-safe imports so Linux headless/X11 limitations can be reported cleanly.
 PYAUTOGUI_IMPORT_ERROR: Exception | None = None
 PYNPUT_IMPORT_ERROR: Exception | None = None
+PIL_IMPORT_ERROR: Exception | None = None
 
 try:
     import pyautogui  # type: ignore[import-untyped]
@@ -29,8 +30,9 @@ except Exception as exc:  # pragma: no cover - import behavior is platform depen
 
 try:
     from PIL import Image  # type: ignore[import-untyped]
-except Exception:
+except Exception as exc:
     Image = None  # type: ignore[assignment]
+    PIL_IMPORT_ERROR = exc
 
 os.system("cls" if os.name == "nt" else "clear")
 load_dotenv()
@@ -104,8 +106,8 @@ def run_command(args: list[str]) -> tuple[int, str]:
             capture_output=True,
             text=True,
         )
-    except Exception:
-        return 1, ""
+    except Exception as err:
+        return 1, str(err)
     return completed.returncode, completed.stdout.strip()
 
 
@@ -256,6 +258,8 @@ def check_runtime_requirements() -> None:
         raise SystemExit(1)
     if backend == "wayland_native" and Image is None:
         print("[ERROR] Pillow (PIL) is required for native Wayland pixel capture fallback.")
+        if PIL_IMPORT_ERROR is not None:
+            print(f"        PIL import error: {str(PIL_IMPORT_ERROR)}")
         raise SystemExit(1)
 
 
@@ -497,7 +501,7 @@ def main() -> None:
                 print("        Press F12 to exit, or use a supported compositor/backend setup.")
                 active_window_warning_shown = True
             return False
-        return title.lower() == "genshin impact"
+        return title.casefold() == "genshin impact"
 
     def is_dialogue_playing() -> tuple[bool, bool]:
         """Check if dialogue is currently playing (autoplay button visible)."""
