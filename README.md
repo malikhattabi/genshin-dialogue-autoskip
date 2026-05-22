@@ -45,7 +45,7 @@ The script includes human-like behavior patterns with randomized timing and occa
 - **Display**: Primary monitor (multi-monitor setups should have game on primary display)
 - **Privileges**:
   - Windows: Administrator rights recommended for global key hooks/input emulation
-  - Linux: X11 or Wayland desktop session required (headless shells are not supported)
+  - Linux: X11, Wayland+XWayland, or native Wayland desktop session (headless shells are not supported)
 
 ### Software Requirements
 - Python 3.11+
@@ -166,8 +166,13 @@ The script automatically adapts to various resolutions including:
 ### Linux Notes
 
 - The script requires a desktop display session. If `DISPLAY`/`WAYLAND_DISPLAY` is missing, it exits with a clear error.
-- Active-window detection relies on desktop/window-manager support. Some Linux setups may not expose the active title to `pyautogui`.
-- Window title matching is case-insensitive and looks for `genshin impact` in the active title.
+- X11 session: active-window + key input uses `pyautogui` (fallback to `xdotool` for active title).
+- Wayland with XWayland game: detected when both `WAYLAND_DISPLAY` and `DISPLAY` are available; X11-compatible paths are used.
+- Native Wayland game/session: requires compositor/helper tools:
+  - Active-window title: `hyprctl` (Hyprland) or `swaymsg` (Sway)
+  - Key injection: `wtype`
+  - Pixel capture: `grim`
+- Window title matching checks for titles starting with `genshin impact` (case-insensitive).
 - Global hotkey capture (`F8`/`F9`/`F12`) depends on desktop input hook support; sandboxed desktops may block it.
 
 ## 🔧 How It Works
@@ -202,7 +207,7 @@ To mimic human interaction:
 
 #### Script won't start
 - **Windows solution**: Ensure you're running as Administrator (`run.bat` → "Run as administrator")
-- **Linux solution**: Ensure you're running from a graphical desktop session and `DISPLAY`/`WAYLAND_DISPLAY` is set
+- **Linux solution**: Ensure you're running from a graphical desktop session and backend-specific tools are installed for your mode
 
 #### "Python is not installed" error
 - **Solution**: Install Python 3.11+ from [python.org](https://www.python.org/downloads/)
@@ -236,6 +241,9 @@ To mimic human interaction:
 | "This script requires Administrator privileges" | Not running as admin | Run as administrator |
 | "Python is not installed or not in PATH" | Python not found | Install Python and add to PATH |
 | "No graphical session detected" | Linux desktop env vars missing | Run from desktop terminal with X11/Wayland session |
+| "Native Wayland key injection requires `wtype`" | Native Wayland input backend missing | Install `wtype` |
+| "Native Wayland pixel capture requires `grim`" | Native Wayland capture backend missing | Install `grim` |
+| "Native Wayland active-window detection is not supported" | No supported compositor API tool | Install/use `hyprctl` (Hyprland) or `swaymsg` (Sway) |
 | "Active window detection is unavailable" | Window manager/session does not expose active title APIs | Use a supported desktop session/window manager |
 | "Failed to install uv" | Network or permission issue | Check internet connection, try manual install |
 | "Script exited with error code: X" | Runtime error | Check console for details, retry with F8 |

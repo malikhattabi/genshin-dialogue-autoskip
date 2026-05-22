@@ -16,6 +16,26 @@ print_warn() {
   printf '[WARN] %s\n' "$1"
 }
 
+SESSION_TYPE="${XDG_SESSION_TYPE:-}"
+HAS_DISPLAY=0
+HAS_WAYLAND=0
+[[ -n "${DISPLAY:-}" ]] && HAS_DISPLAY=1
+[[ -n "${WAYLAND_DISPLAY:-}" ]] && HAS_WAYLAND=1
+
+if [[ "$SESSION_TYPE" == "wayland" || $HAS_WAYLAND -eq 1 ]]; then
+  echo "Detected Wayland session."
+  if [[ $HAS_DISPLAY -eq 1 ]]; then
+    print_ok "XWayland bridge detected (DISPLAY is set)."
+  else
+    print_warn "Native Wayland mode detected."
+    command -v wtype >/dev/null 2>&1 || print_warn "wtype not found (required for key injection on native Wayland)."
+    command -v grim >/dev/null 2>&1 || print_warn "grim not found (required for pixel capture on native Wayland)."
+    if ! command -v hyprctl >/dev/null 2>&1 && ! command -v swaymsg >/dev/null 2>&1; then
+      print_warn "hyprctl/swaymsg not found (required for native Wayland active-window detection)."
+    fi
+  fi
+fi
+
 echo "Checking Python..."
 if command -v python3 >/dev/null 2>&1; then
   PYTHON_BIN="python3"
@@ -70,7 +90,7 @@ print_error "Script exited with error code: $status"
 
 if [[ -t 0 && -t 1 ]]; then
   read -r -p "Would you like to retry? (y/N): " retry
-  if [[ "$retry" == "y" || "$retry" == "Y" || "$retry" == "yes" || "$retry" == "YES" ]]; then
+  if [[ "${retry,,}" == y* ]]; then
     run_app
     status=$?
     if [[ $status -eq 0 ]]; then
