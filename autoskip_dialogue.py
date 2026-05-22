@@ -1,16 +1,30 @@
 import os
+import platform
 from random import randint, uniform
 from threading import Thread
 from time import perf_counter, sleep
-from typing import Union
-from win32api import GetSystemMetrics  # type: ignore[import-untyped]
+from typing import Any, Union
 
-from pyautogui import getActiveWindowTitle, press, pixel  # type: ignore[import-untyped]
-from pynput.keyboard import Key, KeyCode, Listener  # type: ignore[import-untyped]
 from dotenv import find_dotenv, load_dotenv, set_key  # type: ignore[import-not-found]
 
 # Initial setup
-os.system("cls")
+# Platform-safe imports so Linux headless/X11 limitations can be reported cleanly.
+PYAUTOGUI_IMPORT_ERROR: Exception | None = None
+PYNPUT_IMPORT_ERROR: Exception | None = None
+
+try:
+    import pyautogui  # type: ignore[import-untyped]
+except Exception as exc:  # pragma: no cover - import behavior is platform dependent
+    pyautogui = None  # type: ignore[assignment]
+    PYAUTOGUI_IMPORT_ERROR = exc
+
+try:
+    from pynput.keyboard import Key, KeyCode, Listener  # type: ignore[import-untyped]
+except Exception as exc:  # pragma: no cover - import behavior is platform dependent
+    Key = KeyCode = Listener = Any  # type: ignore[assignment,misc]
+    PYNPUT_IMPORT_ERROR = exc
+
+os.system("cls" if os.name == "nt" else "clear")
 load_dotenv()
 print("\n" + "=" * 60)
 print("  GENSHIN IMPACT - DIALOGUE AUTO-SKIPPER")
@@ -51,6 +65,28 @@ COORDS = {
         }
     }
 }
+
+
+def check_runtime_requirements() -> None:
+    """Validate runtime requirements and print platform-specific guidance."""
+    if platform.system() == "Linux":
+        # pyautogui/pynput require a graphical desktop session for screen and input hooks.
+        if not os.getenv("DISPLAY") and not os.getenv("WAYLAND_DISPLAY"):
+            print("[ERROR] No graphical session detected (missing DISPLAY/WAYLAND_DISPLAY).")
+            print("        Run this script from a desktop session (X11/Wayland), not headless SSH.")
+            raise SystemExit(1)
+
+    if PYAUTOGUI_IMPORT_ERROR is not None:
+        print(f"[ERROR] Failed to import pyautogui: {PYAUTOGUI_IMPORT_ERROR}")
+        print("        Ensure graphical desktop dependencies are installed.")
+        raise SystemExit(1)
+    if PYNPUT_IMPORT_ERROR is not None:
+        print(f"[ERROR] Failed to import pynput keyboard listener: {PYNPUT_IMPORT_ERROR}")
+        print("        Ensure global keyboard hook support is available on this system.")
+        raise SystemExit(1)
+
+
+check_runtime_requirements()
 
 
 def width_adjust(x: int) -> int:
@@ -132,8 +168,11 @@ def get_pixel(device: str, res: tuple[int,int], name: str):
 # Check if either screen dimension is missing from .env
 if os.environ.get("WIDTH", "") == "" or os.environ.get("HEIGHT", "") == "" or os.environ.get("CONFIRM_BUTTON", "") == "" or os.environ.get("DEVICE", "") == "":
     # Detect and set screen dimensions
-    SCREEN_WIDTH = GetSystemMetrics(0)
-    SCREEN_HEIGHT = GetSystemMetrics(1)
+    if pyautogui is None:
+        raise RuntimeError("pyautogui is not available")
+    screen_size = pyautogui.size()
+    SCREEN_WIDTH = screen_size.width
+    SCREEN_HEIGHT = screen_size.height
     CONFIRM_BUTTON = "f" # F by default
     DEVICE = "mnk" # mouse n keyboard by default
 
@@ -264,32 +303,50 @@ def main() -> None:
     :return: None
     """
 
+    active_window_warning_shown = False
+
     def is_genshin_impact_active() -> bool:
         """Check if Genshin Impact is the active window."""
-        title = getActiveWindowTitle()
-        return bool(title == "Genshin Impact")
+        nonlocal active_window_warning_shown
+        if pyautogui is None:
+            return False
+        try:
+            title = pyautogui.getActiveWindowTitle()
+        except Exception as error:
+            if not active_window_warning_shown:
+                # Some Linux window managers/Wayland sessions don't expose active title APIs.
+                print(f"[ERROR] Active window detection is unavailable: {error}")
+                print("        Supported window management features are required for safe auto-skip.")
+                print("        The script will remain paused until this is available.")
+                active_window_warning_shown = True
+            return False
+        return bool(title and "genshin impact" in title.lower())
 
     def is_dialogue_playing() -> tuple[bool, bool]:
         """Check if dialogue is currently playing (autoplay button visible)."""
+        if pyautogui is None:
+            return False, False
         try:
-            current_pixel = pixel(get_pixel(DEVICE, res, "PLAYING_ICON_X"), get_pixel(DEVICE, res, "PLAYING_ICON_Y"))
+            current_pixel = pyautogui.pixel(get_pixel(DEVICE, res, "PLAYING_ICON_X"), get_pixel(DEVICE, res, "PLAYING_ICON_Y"))
             return bool(current_pixel == (236, 229, 216)), False
         except Exception:
             return False, False
 
     def is_dialogue_option_available() -> tuple[bool, bool]:
         """Check if dialogue options are available."""
+        if pyautogui is None:
+            return False, False
         try:
             # Confirm loading screen is not white
-            if pixel(get_pixel(DEVICE, res, "LOADING_SCREEN_X"), get_pixel(DEVICE, res, "LOADING_SCREEN_Y")) == (255, 255, 255):
+            if pyautogui.pixel(get_pixel(DEVICE, res, "LOADING_SCREEN_X"), get_pixel(DEVICE, res, "LOADING_SCREEN_Y")) == (255, 255, 255):
                 return False, False
 
             # Check if lower dialogue icon pixel is white
-            if pixel(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_LOWER_Y")) == (255, 255, 255):
+            if pyautogui.pixel(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_LOWER_Y")) == (255, 255, 255):
                 return True, True
 
             # Check if higher dialogue icon pixel is white
-            if pixel(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_HIGHER_Y")) == (255, 255, 255):
+            if pyautogui.pixel(get_pixel(DEVICE, res, "DIALOGUE_ICON_X"), get_pixel(DEVICE, res, "DIALOGUE_ICON_HIGHER_Y")) == (255, 255, 255):
                 return True, True
 
             return False, False
@@ -354,10 +411,12 @@ def main() -> None:
         # Check if it's time to press F
         if current_time - last_f_press >= next_f_interval:
             try:
+                if pyautogui is None:
+                    continue
                 if not options_available:
-                    press("f")
+                    pyautogui.press("f")
                 else:
-                    press(CONFIRM_BUTTON)
+                    pyautogui.press(CONFIRM_BUTTON)
             except Exception as e:
                 print(f"\n  Error pressing {CONFIRM_BUTTON} key: {e}")
 
