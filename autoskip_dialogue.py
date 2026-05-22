@@ -1,5 +1,4 @@
 import os
-import platform
 import shutil
 import subprocess
 from io import BytesIO
@@ -34,7 +33,7 @@ except Exception as exc:
     Image = None  # type: ignore[assignment]
     PIL_IMPORT_ERROR = exc
 
-os.system("cls" if os.name == "nt" else "clear")
+os.system("clear")
 load_dotenv()
 print("\n" + "=" * 60)
 print("  GENSHIN IMPACT - DIALOGUE AUTO-SKIPPER")
@@ -222,25 +221,24 @@ def press_key(key_name: str, backend: str) -> None:
 def check_runtime_requirements() -> None:
     """Validate runtime requirements and print platform-specific guidance."""
     backend = display_backend()
-    if platform.system() == "Linux":
-        if backend == "unknown":
-            print("[ERROR] No graphical session detected (missing DISPLAY/WAYLAND_DISPLAY).")
-            print("        Run this script from a desktop session (X11/Wayland), not headless SSH.")
+    if backend == "unknown":
+        print("[ERROR] No graphical session detected (missing DISPLAY/WAYLAND_DISPLAY).")
+        print("        Run this script from a desktop session (X11/Wayland), not headless SSH.")
+        raise SystemExit(1)
+    if backend == "wayland_native":
+        # Native Wayland requires compositor-specific APIs/tools.
+        if not (command_exists("hyprctl") or command_exists("swaymsg")):
+            print("[ERROR] Native Wayland active-window detection is not supported in this session.")
+            print("        Install/use Hyprland (`hyprctl`) or Sway (`swaymsg`) support.")
             raise SystemExit(1)
-        if backend == "wayland_native":
-            # Native Wayland requires compositor-specific APIs/tools.
-            if not (command_exists("hyprctl") or command_exists("swaymsg")):
-                print("[ERROR] Native Wayland active-window detection is not supported in this session.")
-                print("        Install/use Hyprland (`hyprctl`) or Sway (`swaymsg`) support.")
-                raise SystemExit(1)
-            if not command_exists("wtype"):
-                print("[ERROR] Native Wayland key injection requires `wtype`.")
-                print("        Install `wtype` or run the game via XWayland with DISPLAY enabled.")
-                raise SystemExit(1)
-            if not command_exists("grim"):
-                print("[ERROR] Native Wayland pixel capture requires `grim`.")
-                print("        Install `grim` or run the game via XWayland with DISPLAY enabled.")
-                raise SystemExit(1)
+        if not command_exists("wtype"):
+            print("[ERROR] Native Wayland key injection requires `wtype`.")
+            print("        Install `wtype` or run the game via XWayland with DISPLAY enabled.")
+            raise SystemExit(1)
+        if not command_exists("grim"):
+            print("[ERROR] Native Wayland pixel capture requires `grim`.")
+            print("        Install `grim` or run the game via XWayland with DISPLAY enabled.")
+            raise SystemExit(1)
 
     if PYAUTOGUI_IMPORT_ERROR is not None:
         if backend == "wayland_native":
@@ -249,8 +247,7 @@ def check_runtime_requirements() -> None:
         else:
             print(f"[ERROR] Failed to import pyautogui: {PYAUTOGUI_IMPORT_ERROR}")
             print("        Ensure graphical desktop dependencies are installed.")
-            if platform.system() == "Linux":
-                print("        On Linux install runtime deps such as python3-tk and python3-xlib.")
+            print("        On Arch Linux: sudo pacman -S python-xlib tk xdotool")
             raise SystemExit(1)
     if PYNPUT_IMPORT_ERROR is not None:
         print(f"[ERROR] Failed to import pynput keyboard listener: {PYNPUT_IMPORT_ERROR}")

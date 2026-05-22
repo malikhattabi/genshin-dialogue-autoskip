@@ -28,12 +28,25 @@ if [[ "$SESSION_TYPE" == "wayland" || $HAS_WAYLAND -eq 1 ]]; then
     print_ok "XWayland bridge detected (DISPLAY is set)."
   else
     print_ok "Native Wayland mode detected."
-    command -v wtype >/dev/null 2>&1 || { print_error "wtype not found (required for key injection on native Wayland)."; exit 1; }
-    command -v grim >/dev/null 2>&1 || { print_error "grim not found (required for pixel capture on native Wayland)."; exit 1; }
+    command -v wtype >/dev/null 2>&1 || { print_error "wtype not found (required for key injection on native Wayland). Install with: sudo pacman -S wtype"; exit 1; }
+    command -v grim >/dev/null 2>&1 || { print_error "grim not found (required for pixel capture on native Wayland). Install with: sudo pacman -S grim"; exit 1; }
     if ! command -v hyprctl >/dev/null 2>&1 && ! command -v swaymsg >/dev/null 2>&1; then
       print_error "hyprctl/swaymsg not found (required for native Wayland active-window detection on Hyprland/Sway)."
       exit 1
     fi
+  fi
+else
+  # X11 session — ensure xdotool is available as a fallback for window detection
+  if ! command -v xdotool >/dev/null 2>&1; then
+    print_warn "xdotool not found. Install for better X11 window-title detection: sudo pacman -S xdotool"
+  fi
+fi
+
+# On Arch Linux, pyautogui requires the 'tk' and 'python-xlib' system packages.
+# Install them if missing: sudo pacman -S tk python-xlib
+if command -v pacman >/dev/null 2>&1; then
+  if ! python3 -c "import tkinter" >/dev/null 2>&1; then
+    print_warn "tkinter not available. Install with: sudo pacman -S tk"
   fi
 fi
 

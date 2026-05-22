@@ -1,4 +1,5 @@
 PyAutoGUI==0.9.54
-pynput==1.7.6
-python-dotenv==1.0.0
-pyscreeze==0.1.28
+pynput==1.7.7
+python-dotenv==1.1.0
+pyscreeze==0.1.30
+Pillow>=10.0.0
