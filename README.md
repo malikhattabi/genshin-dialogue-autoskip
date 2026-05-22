@@ -40,16 +40,14 @@ The script includes human-like behavior patterns with randomized timing and occa
 ## 📦 Requirements
 
 ### System Requirements
-- **OS**: Windows or Linux (desktop session)
+- **OS**: Linux (desktop session)
 - **Python**: 3.11 or higher
 - **Display**: Primary monitor (multi-monitor setups should have game on primary display)
-- **Privileges**:
-  - Windows: Administrator rights recommended for global key hooks/input emulation
-  - Linux: X11, Wayland+XWayland, or native Wayland desktop session (headless shells are not supported)
+- **Session**: X11, Wayland+XWayland, or native Wayland desktop session (headless shells are not supported)
 
 ### Software Requirements
 - Python 3.11+
-- [uv](https://github.com/astral-sh/uv) package manager (auto-installed by `run.bat` / `run.sh`)
+- [uv](https://github.com/astral-sh/uv) package manager (auto-installed by `run.sh`)
 - Genshin Impact installed and running
 
 ### In-Game Settings
@@ -65,13 +63,11 @@ The script includes human-like behavior patterns with randomized timing and occa
    cd genshin-dialogue-autoskip
    ```
 
-2. Launch the platform script:
-   - **Windows**: Right-click `run.bat` and select **"Run as administrator"**
-   - **Linux**:
-     ```bash
-     chmod +x run.sh
-     ./run.sh
-     ```
+2. Launch the script:
+   ```bash
+   chmod +x run.sh
+   ./run.sh
+   ```
    - The launcher script will automatically:
      - Verify Python installation
      - Verify pip availability
@@ -107,8 +103,7 @@ The script includes human-like behavior patterns with randomized timing and occa
 1. **Launch Genshin Impact** and ensure it's running on your primary display
 
 2. **Run the script**:
-   - Windows: Right-click `run.bat` → **"Run as administrator"**
-   - Linux: Run `./run.sh`
+   - Run `./run.sh`
    - Or run manually with `uv run autoskip_dialogue.py`
 
 3. **Verify Resolution**:
@@ -195,7 +190,6 @@ To mimic human interaction:
 
 ### Safety Features
 
-- **Admin Check**: Verifies administrator privileges before running
 - **Linux Session Check**: Fails early with guidance when no graphical session is available
 - **Python Check**: Confirms Python installation and version
 - **Error Handling**: Gracefully handles errors with informative messages
@@ -206,7 +200,6 @@ To mimic human interaction:
 ### Common Issues
 
 #### Script won't start
-- **Windows solution**: Ensure you're running as Administrator (`run.bat` → "Run as administrator")
 - **Linux solution**: Ensure you're running from a graphical desktop session and backend-specific tools are installed for your mode
 
 #### "Python is not installed" error
@@ -229,7 +222,6 @@ To mimic human interaction:
 
 #### Key presses not working
 - **Check**:
-  - Windows: script is running with Administrator privileges
   - Linux: desktop/session allows global keyboard hooks
   - No other programs are intercepting keyboard input
   - Genshin Impact has focus
@@ -238,7 +230,6 @@ To mimic human interaction:
 
 | Error | Meaning | Solution |
 |-------|---------|----------|
-| "This script requires Administrator privileges" | Not running as admin | Run as administrator |
 | "Python is not installed or not in PATH" | Python not found | Install Python and add to PATH |
 | "No graphical session detected" | Linux desktop env vars missing | Run from desktop terminal with X11/Wayland session |
 | "Native Wayland key injection requires `wtype`" | Native Wayland input backend missing | Install `wtype` |
@@ -259,7 +250,7 @@ If you encounter issues:
    - Error message
    - Python version
    - Screen resolution
-   - Windows version
+   - Linux distribution + desktop session (X11/Wayland, compositor/window manager)
 
 ## 🎮 Gamepad Support
 
