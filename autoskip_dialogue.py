@@ -242,7 +242,8 @@ def check_runtime_requirements() -> None:
 
     if PYAUTOGUI_IMPORT_ERROR is not None:
         if backend == "wayland_native":
-            print(f"[WARN] pyautogui import failed; this is expected on some native Wayland sessions, using compositor-specific tools instead: {str(PYAUTOGUI_IMPORT_ERROR)}")
+            print("[WARN] pyautogui import failed; using native Wayland fallbacks instead:")
+            print(f"       {str(PYAUTOGUI_IMPORT_ERROR)}")
         else:
             print(f"[ERROR] Failed to import pyautogui: {PYAUTOGUI_IMPORT_ERROR}")
             print("        Ensure graphical desktop dependencies are installed.")
@@ -252,6 +253,9 @@ def check_runtime_requirements() -> None:
     if PYNPUT_IMPORT_ERROR is not None:
         print(f"[ERROR] Failed to import pynput keyboard listener: {PYNPUT_IMPORT_ERROR}")
         print("        Ensure global keyboard hook support is available on this system.")
+        raise SystemExit(1)
+    if backend == "wayland_native" and Image is None:
+        print("[ERROR] Pillow (PIL) is required for native Wayland pixel capture fallback.")
         raise SystemExit(1)
 
 
@@ -388,8 +392,10 @@ else:
 
     confirm_button = os.getenv("CONFIRM_BUTTON")
     device = os.getenv("DEVICE")
-    if confirm_button is None or device is None:
-        raise ValueError("CONFIRM_BUTTON or DEVICE environment variable is None")
+    if confirm_button is None:
+        raise ValueError("Missing required environment variable: CONFIRM_BUTTON")
+    if device is None:
+        raise ValueError("Missing required environment variable: DEVICE")
     CONFIRM_BUTTON = confirm_button
     DEVICE = device
 
@@ -488,6 +494,7 @@ def main() -> None:
                 # Wayland compositors/window managers can block active-title APIs.
                 print("[ERROR] Active window detection is unavailable for this session/window manager.")
                 print("        The script will remain paused until active-window APIs are available.")
+                print("        Press F12 to exit, or use a supported compositor/backend setup.")
                 active_window_warning_shown = True
             return False
         return title.lower() == "genshin impact"

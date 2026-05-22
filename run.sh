@@ -27,11 +27,12 @@ if [[ "$SESSION_TYPE" == "wayland" || $HAS_WAYLAND -eq 1 ]]; then
   if [[ $HAS_DISPLAY -eq 1 ]]; then
     print_ok "XWayland bridge detected (DISPLAY is set)."
   else
-    print_warn "Native Wayland mode detected."
-    command -v wtype >/dev/null 2>&1 || print_warn "wtype not found (required for key injection on native Wayland)."
-    command -v grim >/dev/null 2>&1 || print_warn "grim not found (required for pixel capture on native Wayland)."
+    print_ok "Native Wayland mode detected."
+    command -v wtype >/dev/null 2>&1 || { print_error "wtype not found (required for key injection on native Wayland)."; exit 1; }
+    command -v grim >/dev/null 2>&1 || { print_error "grim not found (required for pixel capture on native Wayland)."; exit 1; }
     if ! command -v hyprctl >/dev/null 2>&1 && ! command -v swaymsg >/dev/null 2>&1; then
-      print_warn "hyprctl/swaymsg not found (required for native Wayland active-window detection on Hyprland/Sway)."
+      print_error "hyprctl/swaymsg not found (required for native Wayland active-window detection on Hyprland/Sway)."
+      exit 1
     fi
   fi
 fi
